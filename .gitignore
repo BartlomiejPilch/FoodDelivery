@@ -1,6 +1,6 @@
 # Ignoruj katalog z paczkami node
 node_modules/
-note.txt
+note-env.txt
 
 # Opcjonalnie: pliki logów
 npm-debug.log*
