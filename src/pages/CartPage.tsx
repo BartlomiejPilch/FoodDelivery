@@ -1,3 +1,6 @@
+import { useNavigate } from "react-router-dom";
+import SuccessPopupBig from "../components/SuccessPopupBig";
+import SuccessToast from "../components/SuccessToast";
 import TopHeader from "../components/TopHeader";
 import { useCart } from "../context/CartContext";
 import { useState } from "react";
@@ -20,7 +23,7 @@ interface ValidationErrors {
 
 
 export default function CartPage() {
-  const { cartCount, cartItems,clearCart, removeFromCart, updateCartQuantity } = useCart();
+  const { cartCount, cartItems, clearCart, removeFromCart, updateCartQuantity } = useCart();
 
   const [formData, setFormData] = useState<FormData>({
     name: "",
@@ -34,10 +37,10 @@ export default function CartPage() {
     pickupLocation: "",
     pickupTime: "",
   };
-
+  const navigate = useNavigate();
   const [discountCode, setDiscountCode] = useState("");
   const [discountPercent, setDiscountPercent] = useState(0);
-
+  const [open, setOpen] = useState(false);
 
 
   const pickupLocations = ["Hala 10", "Hala 12", "Biuro główne"];
@@ -45,6 +48,8 @@ export default function CartPage() {
 
   const [termsAccepted, setTermsAccepted] = useState(false);
   const [errors, setErrors] = useState<ValidationErrors>({});
+
+
 
   const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -68,9 +73,9 @@ export default function CartPage() {
     setDiscountCode("");
     setDiscountPercent(0);
     setErrors({});
-    clearCart();         
+    clearCart();
 
-    alert("Zamówienie przyjęte — dziękujemy!");
+    setOpen(true);
   };
 
 
@@ -299,7 +304,7 @@ export default function CartPage() {
                 </label>
               </div>
               {errors.terms && <p className="text-red-600 text-xs mt-1">{errors.terms}</p>}
-
+            
               {/* Zamówienie */}
               {/* Zamówienie + suma */}
               <div className="mt-6 flex items-center justify-between gap-4">
@@ -313,6 +318,7 @@ export default function CartPage() {
                   Złóż zamówienie
                 </button>
 
+
                 <div>
                   {discountPercent > 0 && (
                     <div className="mt-2 text-green-600 text-sm font-medium ">
@@ -323,6 +329,21 @@ export default function CartPage() {
                     {finalTotal.toFixed(2)} zł
                   </span>
                 </div>
+
+                <SuccessPopupBig
+                  open={open}
+                  onClose={() => setOpen(false)}
+                  onExited={() => {                         
+                    clearCart();                   
+                    navigate("/");                          
+                  }}
+                  title="Zapisane!"
+                  message={<>Zamówienie BLP60532 jest w trakcie przygotowania.</>}
+                  autoHideMs={10000}
+
+                  // primaryAction={{ label: "Przejdź dalej", onClick: () => setOpen(false) }}
+                />
+
               </div>
             </div>
           </div>
