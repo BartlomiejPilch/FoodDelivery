@@ -7,6 +7,7 @@ type Props = {
     onExited?: () => void;
     title?: string;
     message?: string | React.ReactNode;
+    order_number?: string;
     autoHideMs?: number | null;
     primaryAction?: { label: string; onClick: () => void };
 };
@@ -17,6 +18,7 @@ export default function SuccessPopupBig({
     onExited,
     title = "Sukces!",
     message = "Operacja zakończona powodzeniem.",
+    order_number = '',
     autoHideMs = null,
     primaryAction,
 }: Props) {
@@ -80,7 +82,9 @@ export default function SuccessPopupBig({
                             {/* Treść */}
                             <h3 className="text-center text-3xl sm:text-4xl font-semibold text-gray-900">{title}</h3>
                             <div className="mt-4 text-center text-lg sm:text-xl text-gray-600">{message}</div>
-
+                            <div className="mt-4 text-center text-lg sm:text-xl text-gray-600">Numer Twojego zamówienia: 
+                                <a className="font-black ms-5">{order_number}</a>
+                            </div>
                             {/* Akcje */}
                             <div className="mt-10 flex flex-wrap items-center justify-center gap-4">
                                 {primaryAction && (
@@ -98,6 +102,24 @@ export default function SuccessPopupBig({
                                     Zamknij
                                 </button>
                             </div>
+
+                            {autoHideMs && (
+                                <div className="mt-8">
+                                    <div className="h-1.5 w-full overflow-hidden rounded-full bg-gray-200">
+                                        <motion.div
+                                            key={open ? "progress-open" : "progress-closed"}
+                                            initial={{ width: "100%" }}
+                                            animate={{ width: "0%" }}
+                                            transition={{ duration: (autoHideMs ?? 0) / 1000, ease: "linear" }}
+                                            className="h-full bg-green-500"
+                                        />
+                                    </div>
+                                    <p className="mt-2 text-center text-xs text-gray-500">
+
+                                    </p>
+                                </div>
+                            )}
+
                         </motion.div>
                     </div>
                 </div>

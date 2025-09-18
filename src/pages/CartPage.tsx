@@ -3,7 +3,8 @@ import SuccessPopupBig from "../components/SuccessPopupBig";
 import SuccessToast from "../components/SuccessToast";
 import TopHeader from "../components/TopHeader";
 import { useCart } from "../context/CartContext";
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { api, postFrontendOrder } from "../lib/api";
 
 
 interface FormData {
@@ -21,6 +22,8 @@ interface ValidationErrors {
   terms?: string;
 }
 
+type Place = { id: number; place_name: string; is_active: boolean; note?: string };
+type Hour = { id: number; hour: string; is_active: boolean; note?: string };
 
 export default function CartPage() {
   const { cartCount, cartItems, clearCart, removeFromCart, updateCartQuantity } = useCart();
@@ -41,14 +44,19 @@ export default function CartPage() {
   const [discountCode, setDiscountCode] = useState("");
   const [discountPercent, setDiscountPercent] = useState(0);
   const [open, setOpen] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
 
-
-  const pickupLocations = ["Hala 10", "Hala 12", "Biuro główne"];
-  const pickupTimes = ["12:00", "16:00", "21:00"];
 
   const [termsAccepted, setTermsAccepted] = useState(false);
   const [errors, setErrors] = useState<ValidationErrors>({});
 
+  const [places, setPlaces] = useState<Place[]>([]);
+  const [hours, setHours] = useState<Hour[]>([]);
+  const [loadingMeta, setLoadingMeta] = useState(true);
+  const [metaErr, setMetaErr] = useState("");
+
+  const [deliveryPlaceId, setDeliveryPlaceId] = useState<number | null>(null);
+  const [deliveryHourId, setDeliveryHourId] = useState<number | null>(null);
 
 
   const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -57,51 +65,108 @@ export default function CartPage() {
     const e: ValidationErrors = {};
     if (!formData.name.trim()) e.name = "Podaj imię i nazwisko";
     if (!emailRegex.test(formData.email)) e.email = "Podaj poprawny e-mail";
-    if (!formData.pickupLocation) e.pickupLocation = "Wybierz miejsce odbioru";
-    if (!formData.pickupTime) e.pickupTime = "Wybierz godzinę odbioru";
+    if (!deliveryPlaceId) e.pickupLocation = "Wybierz miejsce odbioru";
+    if (!deliveryHourId) e.pickupTime = "Wybierz godzinę odbioru";
     if (!termsAccepted) e.terms = "Zaakceptuj regulamin";
     return e;
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const errs = getErrors();
     setErrors(errs);
     if (Object.keys(errs).length) return;
-    setFormData(initialForm);
-    setTermsAccepted(false);
-    setDiscountCode("");
-    setDiscountPercent(0);
-    setErrors({});
-    clearCart();
+    if (cartItems.length === 0) return;
 
-    setOpen(true);
+    try {
+      setSubmitting(true);
+      const items = cartItems.map(ci => ({
+        menu_id: Number(ci.id),                 // ID z tabeli menu
+        quantity: Math.max(1, ci.quantity || 1)
+      }));
+
+      const payload: any = {
+        name: formData.name,
+        email: formData.email,
+        delivery_place_id: deliveryPlaceId!,    // liczby, nie stringi
+        delivery_hour_id: deliveryHourId!,
+        items
+      };
+
+      if (discountCode.trim()) {
+        payload.rabat_code = discountCode.trim().toUpperCase();
+      }
+      await postFrontendOrder(payload);
+
+
+      // reset UI
+      setFormData({ name: "", email: "", pickupLocation: "", pickupTime: "" });
+      setTermsAccepted(false);
+      setDiscountCode("");
+      setDiscountPercent(0);
+      setErrors({});
+      setOpen(true);
+      clearCart();
+    } catch (err: any) {
+      alert(err?.message || "Nie udało się złożyć zamówienia");
+    } finally {
+      setSubmitting(false);
+    }
   };
 
 
-
   const isFormValid = Object.keys(getErrors()).length === 0;
-
-
-
 
   const handleChange = (e) => {
     const { name, value } = e.target;
     setFormData(prev => ({ ...prev, [name]: value }));
   };
 
-  const handleApplyDiscount = () => {
-    if (discountCode.trim().toUpperCase() === "RABAT10") {
-      setDiscountPercent(10);
-    } else {
+  const [appliedRabatId, setAppliedRabatId] = useState<number | null>(null);
+
+  const handleApplyDiscount = async () => {
+    const code = discountCode.trim().toUpperCase();
+    if (!code) { setDiscountPercent(0); setAppliedRabatId(null); return; }
+
+    const v = await api.validateRabatCode(code);
+    if (!v) {
       setDiscountPercent(0);
-      alert("Nieprawidłowy kod rabatowy");
+      setAppliedRabatId(null);
+      alert("Nieprawidłowy lub wygasły kod rabatowy");
+      return;
     }
+    setDiscountPercent(Number(v.percentage || 0));
+    setAppliedRabatId(v.id);
   };
+
 
   const total = cartItems.reduce((sum, item) => sum + item.price * item.quantity, 0);
   const discountedTotal = total * (1 - discountPercent / 100);
   const finalTotal = discountPercent > 0 ? discountedTotal : total;
+
+  useEffect(() => {
+    (async () => {
+      try {
+        setLoadingMeta(true); setMetaErr("");
+        const [ph, pl] = await Promise.all([
+          api.getDeliveryHours(),
+          api.getDeliveryPlaces()
+        ]);
+        const activeHours = (ph.items || []).filter(h => h.is_active);
+        const activePlaces = (pl.items || []).filter(p => p.is_active);
+        setHours(activeHours);
+        setPlaces(activePlaces);
+        // suggest defaults
+        if (activePlaces[0]) setDeliveryPlaceId(activePlaces[0].id);
+        if (activeHours[0]) setDeliveryHourId(activeHours[0].id);
+      } catch (e: any) {
+        setMetaErr(e?.message || "Nie udało się pobrać lokalizacji/godzin");
+      } finally {
+        setLoadingMeta(false);
+      }
+    })();
+  }, []);
 
   return (
     <section className="relative min-h-screen flex flex-col justify-between text-white  px-4">
@@ -122,8 +187,6 @@ export default function CartPage() {
 
       {/* Główna zawartość */}
       <div className="relative z-10 w-full flex flex-col items-center">
-
-
         <div className="items-centeritems-center mb-6">
           <h1 className="text-3xl md:text-5xl font-extrabold mb-4 text-[#ffffff] pt-2.5" style={{ textShadow: "0px 0px 4px rgba(0, 0, 0, 0.5)" }}>
             Twój koszyk
@@ -211,7 +274,6 @@ export default function CartPage() {
           {/* Prawa kolumna – formularz + rabat */}
           <div className="bg-white rounded-xl shadow p-6 text-black self-start">
             <h2 className="text-2xl font-bold mb-4">Dane do odbioru</h2>
-
             <div className="space-y-4">
               <div>
                 <label className="block text-sm mb-1">Imię i nazwisko</label>
@@ -240,34 +302,33 @@ export default function CartPage() {
                 <label className="block text-sm mb-1">Miejsce odbioru</label>
                 <select
                   name="pickupLocation"
-                  value={formData.pickupLocation}
-                  onChange={handleChange}
+                  value={String(deliveryPlaceId ?? "")}
+                  onChange={(e) => setDeliveryPlaceId(Number(e.target.value) || null)}
                   className="w-full border border-gray-300 rounded px-3 py-2"
                 >
                   <option value="">Wybierz miejsce</option>
-                  {pickupLocations.map((loc) => (
-                    <option key={loc} value={loc}>{loc}</option>
+                  {places.map(p => (
+                    <option key={p.id} value={p.id}>{p.place_name}</option>
                   ))}
                 </select>
                 {errors.pickupLocation && <p className="text-red-600 text-xs mt-1">{errors.pickupLocation}</p>}
               </div>
 
               <div>
-                <label className="block text-sm mb-1">Godzina odbioru</label>
                 <select
                   name="pickupTime"
-                  value={formData.pickupTime}
-                  onChange={handleChange}
+                  value={String(deliveryHourId ?? "")}
+                  onChange={(e) => setDeliveryHourId(Number(e.target.value) || null)}
                   className="w-full border border-gray-300 rounded px-3 py-2"
                 >
                   <option value="">Wybierz godzinę</option>
-                  {pickupTimes.map((time) => (
-                    <option key={time} value={time}>{time}</option>
+                  {hours.map(h => (
+                    <option key={h.id} value={h.id}>{h.hour}</option>
                   ))}
                 </select>
                 {errors.pickupTime && <p className="text-red-600 text-xs mt-1">{errors.pickupTime}</p>}
+                {metaErr && <p className="text-red-600 text-sm mt-2">{metaErr}</p>}
               </div>
-
               {/* Kod rabatowy */}
               <div className="mt-6">
                 <label className="block text-sm mb-1">Kod rabatowy</label>
@@ -286,7 +347,6 @@ export default function CartPage() {
                     Zastosuj
                   </button>
                 </div>
-
               </div>
               <div className="flex items-start gap-2 mt-4">
                 <input
@@ -304,21 +364,17 @@ export default function CartPage() {
                 </label>
               </div>
               {errors.terms && <p className="text-red-600 text-xs mt-1">{errors.terms}</p>}
-            
               {/* Zamówienie */}
               {/* Zamówienie + suma */}
               <div className="mt-6 flex items-center justify-between gap-4">
-
-
                 <button
                   onClick={handleSubmit}
-                  className={` bg-green-600 text-white font-semibold py-2 px-6 rounded-full shadowtransition-transform transition-colors
-                  ${isFormValid ? "hover:scale-105 hover:bg-green-700" : "opacity-80"}`}
+                  disabled={!isFormValid || submitting}
+                  className={`bg-green-600 text-white font-semibold py-2 px-6 rounded-full transition
+                 ${isFormValid && !submitting ? "hover:scale-105 hover:bg-green-700" : "opacity-60 cursor-not-allowed"}`}
                 >
-                  Złóż zamówienie
+                  {submitting ? "Wysyłanie…" : "Złóż zamówienie"}
                 </button>
-
-
                 <div>
                   {discountPercent > 0 && (
                     <div className="mt-2 text-green-600 text-sm font-medium ">
@@ -333,21 +389,18 @@ export default function CartPage() {
                 <SuccessPopupBig
                   open={open}
                   onClose={() => setOpen(false)}
-                  onExited={() => {                         
-                    clearCart();                   
-                    navigate("/");                          
+                  onExited={() => {
+                    clearCart();
+                    navigate("/");
                   }}
                   title="Zapisane!"
-                  message={<>Zamówienie BLP60532 jest w trakcie przygotowania.</>}
-                  autoHideMs={10000}
-
-                  // primaryAction={{ label: "Przejdź dalej", onClick: () => setOpen(false) }}
+                  message={<>Wspaniale Twoje zamówienie zostało przyjęte do realizacji!</>}
+                  order_number="GLU324123"
+                  autoHideMs={30000}
                 />
-
               </div>
             </div>
           </div>
-
         </div>
 
         {/* Powrót */}
