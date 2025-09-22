@@ -105,6 +105,21 @@ export type RabatValidation = {
   reason?: string;
 };
 
+export type FrontendOrderCreatedItem = {
+  order_id: number;
+  menu_id: number;
+  quantity: number;
+  price: number;
+  order_code: string; 
+};
+
+export type FrontendOrderResponse = {
+  ok: boolean;
+  order_code: string;                
+  created: FrontendOrderCreatedItem[]; 
+};
+
+
 export async function postFrontendOrder(body: {
   name: string;
   email: string;
@@ -112,6 +127,7 @@ export async function postFrontendOrder(body: {
   delivery_hour_id: number;
   items: { menu_id: number; quantity: number }[];
   rabat_code?: string;
+  payment_method?: 'cash' | 'online';
 }) {
   const res = await fetch(`${API_BASE}/frontend/orders`, {
     method: 'POST',
@@ -130,7 +146,7 @@ export async function postFrontendOrder(body: {
       throw new Error(txt || `HTTP ${res.status}`);
     }
   }
-  return res.json() as Promise<{ ok: boolean; created: any[] }>;
+  return res.json() as Promise<FrontendOrderResponse>;
 }
 
 export const api = {

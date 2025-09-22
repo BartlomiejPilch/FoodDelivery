@@ -34,7 +34,11 @@ export default function DishCardMobile({
   const cartItem = cartItems.find(item => item.id === id);
   const quantity = cartItem?.quantity || 0;
 
-  const handleAdd = () => addToCart({ id, name, price, image });
+  const handleAdd = () => addToCart({
+    id, name, price, image,
+    day: "",
+    date: ""
+  });
   const handleRemoveOne = () => removeFromCart(id, 1);
   const handleRemoveAll = () => removeFromCart(id, quantity);
 

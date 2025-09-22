@@ -48,7 +48,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
     });
   };
 
-  const updateCartQuantity = (productId, quantity) => {
+  const updateCartQuantity = (productId:any, quantity:any) => {
   setCartItems((prevItems) =>
     prevItems.map((item) =>
       item.id === productId ? { ...item, quantity } : item

@@ -2,7 +2,7 @@ import DishCard from "./DishCard";
 import TopHeader from "./TopHeader";
 import CartButton from "./CartButton";
 import DishCardMobile from "./DishCardMobile";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useRef } from "react";
 import { api, MenuWithDishRow } from "../lib/api";
 
 type CardItem = {
@@ -27,6 +27,50 @@ const fmtDate = (iso: string) => {
   return `${dd}.${mm}`;
 };
 
+function DesktopSmartRow({ items }: { items: CardItem[] }) {
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const [overflow, setOverflow] = useState(false);
+
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+
+    const check = () => setOverflow(el.scrollWidth > el.clientWidth + 1);
+    check();
+
+    const ro = new ResizeObserver(check);
+    ro.observe(el);
+    window.addEventListener("resize", check);
+    return () => {
+      ro.disconnect();
+      window.removeEventListener("resize", check);
+    };
+  }, [items.length]);
+
+  return (
+    <div
+      ref={scrollRef}
+      className={`overflow-x-auto no-scrollbar scroll-smooth ${overflow ? "snap-x snap-mandatory" : ""
+        }`}
+    >
+      <div
+        className={`flex gap-6 px-10 my-5 ${overflow ? "w-max justify-start" : "w-full justify-center"
+          }`}
+      >
+        {items.map((item) => (
+          <div
+            key={item.id}
+            className={`${overflow ? "snap-start" : ""} shrink-0 w-[340px]`}
+          >
+            <DishCard {...item} />
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+
 export default function MenuSection() {
   const [rows, setRows] = useState<MenuWithDishRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -38,12 +82,11 @@ export default function MenuSection() {
         setLoading(true); setErr("");
         const res = await api.menuExpanded({
           is_active: true,
-          not_expired: true,   
-          orderable: true,     
+          not_expired: true,
+          orderable: true,
           limit: 50,
           offset: 0,
         });
-
 
         setRows(res.items);
       } catch (e: any) {
@@ -99,18 +142,9 @@ export default function MenuSection() {
 
       {!loading && !err && (
         <>
-          {/* Desktop */}
-          <div className="hidden md:flex gap-8 justify-center flex-wrap mb-[50px]">
-            {items.map((item) => <DishCard key={item.id} {...item} />)}
-          </div>
-
-          {/* Mobile */}
-          <div className="md:hidden overflow-x-auto flex gap-2 px-10 snap-x snap-mandatory scroll-smooth">
-            {items.map((item) => (
-              <div key={item.id} className="snap-center shrink-0 w-[300px] mx-2">
-                <DishCardMobile {...item} />
-              </div>
-            ))}
+          {/* Desktop – wyśrodkuj gdy się mieści, w przeciwnym razie lewa krawędź + scroll */}
+          <div className="hidden md:block relative w-full">
+            <DesktopSmartRow items={items} />
           </div>
         </>
       )}

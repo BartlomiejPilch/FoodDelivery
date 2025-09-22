@@ -6,7 +6,6 @@ import { useCart } from "../context/CartContext";
 import { useEffect, useState } from "react";
 import { api, postFrontendOrder } from "../lib/api";
 
-
 interface FormData {
   name: string;
   email: string;
@@ -46,7 +45,6 @@ export default function CartPage() {
   const [open, setOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
-
   const [termsAccepted, setTermsAccepted] = useState(false);
   const [errors, setErrors] = useState<ValidationErrors>({});
 
@@ -58,6 +56,8 @@ export default function CartPage() {
   const [deliveryPlaceId, setDeliveryPlaceId] = useState<number | null>(null);
   const [deliveryHourId, setDeliveryHourId] = useState<number | null>(null);
 
+  const [paymentMethod, setPaymentMethod] = useState<'cash' | 'online'>('cash');
+  const [orderCodes, setOrderCodes] = useState<string>('');
 
   const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -71,7 +71,6 @@ export default function CartPage() {
     return e;
   };
 
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const errs = getErrors();
@@ -82,23 +81,24 @@ export default function CartPage() {
     try {
       setSubmitting(true);
       const items = cartItems.map(ci => ({
-        menu_id: Number(ci.id),                 // ID z tabeli menu
+        menu_id: Number(ci.id),                 
         quantity: Math.max(1, ci.quantity || 1)
       }));
 
       const payload: any = {
         name: formData.name,
         email: formData.email,
-        delivery_place_id: deliveryPlaceId!,    // liczby, nie stringi
+        delivery_place_id: deliveryPlaceId!,    
         delivery_hour_id: deliveryHourId!,
-        items
+        items,
+        payment_method: paymentMethod,
       };
 
       if (discountCode.trim()) {
         payload.rabat_code = discountCode.trim().toUpperCase();
       }
-      await postFrontendOrder(payload);
 
+      const response = await postFrontendOrder(payload);
 
       // reset UI
       setFormData({ name: "", email: "", pickupLocation: "", pickupTime: "" });
@@ -106,6 +106,7 @@ export default function CartPage() {
       setDiscountCode("");
       setDiscountPercent(0);
       setErrors({});
+      setOrderCodes(response?.order_code);
       setOpen(true);
       clearCart();
     } catch (err: any) {
@@ -118,7 +119,7 @@ export default function CartPage() {
 
   const isFormValid = Object.keys(getErrors()).length === 0;
 
-  const handleChange = (e) => {
+  const handleChange = (e:any) => {
     const { name, value } = e.target;
     setFormData(prev => ({ ...prev, [name]: value }));
   };
@@ -276,7 +277,7 @@ export default function CartPage() {
             <h2 className="text-2xl font-bold mb-4">Dane do odbioru</h2>
             <div className="space-y-4">
               <div>
-                <label className="block text-sm mb-1">Imię i nazwisko</label>
+                <label className="block text-sm mb-1">Imię</label>
                 <input
                   type="text"
                   name="name"
@@ -315,6 +316,7 @@ export default function CartPage() {
               </div>
 
               <div>
+                <label className="block text-sm mb-1">Godzina odbioru</label>
                 <select
                   name="pickupTime"
                   value={String(deliveryHourId ?? "")}
@@ -348,6 +350,39 @@ export default function CartPage() {
                   </button>
                 </div>
               </div>
+
+              {/* Wybór płatności */}
+              <div className="mt-6">
+                <label className="block text-sm mb-2 font-medium">Wybierz opcję płatności</label>
+                <div className="flex gap-4 items-center">
+                  <label className="inline-flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="radio"
+                      name="payment"
+                      value="cash"
+                      checked={paymentMethod === 'cash'}
+                      onChange={() => setPaymentMethod('cash')}
+                      className="accent-green-600"
+                    />
+                    <span>Gotówka przy odbiorze</span>
+                  </label>
+                  <label className="inline-flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="radio"
+                      name="payment"
+                      value="online"
+                      checked={paymentMethod === 'online'}
+                      onChange={() => setPaymentMethod('online')}
+                      className="accent-green-600"
+                    />
+                    <span>Płatność internetowa</span>
+                  </label>
+                </div>
+                <p className="text-xs text-slate-500 mt-1">
+
+                </p>
+              </div>
+
               <div className="flex items-start gap-2 mt-4">
                 <input
                   id="terms"
@@ -395,7 +430,7 @@ export default function CartPage() {
                   }}
                   title="Zapisane!"
                   message={<>Wspaniale Twoje zamówienie zostało przyjęte do realizacji!</>}
-                  order_number="GLU324123"
+                  order_number={orderCodes.length ? orderCodes : "—"}
                   autoHideMs={30000}
                 />
               </div>
